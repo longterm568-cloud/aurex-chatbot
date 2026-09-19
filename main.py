@@ -1,4 +1,5 @@
 import os
+import asyncio
 import random
 import threading
 from flask import Flask
@@ -16,14 +17,12 @@ from telegram.ext import (
 BOT_TOKEN = "8600761951:AAEIhkCcWvMxFexkrpHbWH_MPP2T42JbsMs"
 GEMINI_API_KEY = "AQ.Ab8RN6IGNBx5NElUpaohHX7LZv8GN4H21nyfjeaci7U8NOly6w"
 
-# तुझी आवडती 3 स्टिकर पॅक्स
 STICKER_PACKS = [
     "Cat_stk_by_yoon",
     "SUJAL_STICKER_PACK_47be_by_offstikbot",
     "GOJO_NEVER_DIE_by_fStikBot"
 ]
 
-# AI Client तयार करणे
 ai_client = genai.Client(api_key=GEMINI_API_KEY)
 
 # ----------------- FLASK (24/7 UPTIME) ----------------- #
@@ -37,7 +36,7 @@ def run_flask():
     port = int(os.environ.get("PORT", 8080))
     app.run(host="0.0.0.0", port=port)
 
-# ----------------- AI FUNNY REPLY FUNCTION ----------------- #
+# ----------------- AI FUNNY REPLY ----------------- #
 def get_funny_reply(user_text: str, user_name: str) -> str:
     system_prompt = (
         "You are 'Aurex Chatbot', an extremely funny, sarcastic, witty, and playful AI friend. "
@@ -55,9 +54,9 @@ def get_funny_reply(user_text: str, user_name: str) -> str:
         return response.text.strip()
     except Exception as e:
         print(f"Gemini API Error: {e}")
-        return "Network ne dhoka dila re deva! परत विचार जरा! 😂"
+        return "Network cha issue distoy re bhava! परत बोल जरा! 😂"
 
-# ----------------- RANDOM STICKER FUNCTION ----------------- #
+# ----------------- STICKER SENDER ----------------- #
 async def send_random_sticker(context: ContextTypes.DEFAULT_TYPE, chat_id: int, reply_to_id: int):
     try:
         pack_name = random.choice(STICKER_PACKS)
@@ -72,7 +71,7 @@ async def send_random_sticker(context: ContextTypes.DEFAULT_TYPE, chat_id: int, 
     except Exception as e:
         print(f"Sticker Error: {e}")
 
-# ----------------- TELEGRAM HANDLERS ----------------- #
+# ----------------- HANDLERS ----------------- #
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     name = update.effective_user.first_name
     welcome_text = (
@@ -96,11 +95,8 @@ async def chat_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     should_reply = False
 
-    # 1. Private DM madhe asel tar nehmi bolnaar
     if chat_type == "private":
         should_reply = True
-
-    # 2. Group madhe asel tar fakt tag kiva reply kelyavarch bolnaar
     elif chat_type in ["group", "supergroup"]:
         if f"@{bot_username}" in text.lower():
             should_reply = True
@@ -113,26 +109,31 @@ async def chat_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await send_random_sticker(context, update.effective_chat.id, message.message_id)
             return
 
-        # Typing action daakhvne
         await context.bot.send_chat_action(chat_id=update.effective_chat.id, action="typing")
-
         reply_msg = get_funny_reply(text, user_name)
         sent = await message.reply_text(reply_msg, reply_to_message_id=message.message_id)
 
-        # 40% chance thevli ahe ki to funny sticker suddha pathvel
         if random.random() < 0.40:
             await send_random_sticker(context, update.effective_chat.id, sent.message_id)
 
 # ----------------- MAIN RUNNER ----------------- #
-def main():
-    threading.Thread(target=run_flask, daemon=True).start()
+async def run_bot():
     bot_app = Application.builder().token(BOT_TOKEN).build()
-
     bot_app.add_handler(CommandHandler("start", start_command))
     bot_app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, chat_handler))
 
+    await bot_app.initialize()
+    await bot_app.start()
+    await bot_app.updater.start_polling(drop_pending_updates=True)
     print("Aurex Chatbot is running smoothly...")
-    bot_app.run_polling(drop_pending_updates=True)
+
+    # Keep running forever
+    while True:
+        await asyncio.sleep(3600)
+
+def main():
+    threading.Thread(target=run_flask, daemon=True).start()
+    asyncio.run(run_bot())
 
 if __name__ == "__main__":
     main()
